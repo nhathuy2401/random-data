@@ -67,8 +67,8 @@ Dữ liệu mẫu bắt đầu tại dòng 6:
 |---|---|---|
 | A | STT | `1` |
 | B | Biển số xe | `73H-04440` |
-| C | Số lượng chuyến | `47` |
-| D | Thể tích mỗi chuyến (m³) | `5,92` |
+| C | ĐVT (chuyến) / Số chuyến | `47` |
+| D | Số lượng mỗi chuyến (m³) | `5,92` |
 | E | Tổng thể tích (m³) | `278,24` |
 
 Dòng `Tổng cộng` của file mẫu:
@@ -445,8 +445,8 @@ type DailyGenerationHistory = {
 5. Chuẩn hóa biển số đúng như macro.
 6. Kiểm tra số chuyến là số nguyên dương.
 7. Kiểm tra thể tích là số hữu hạn, không âm.
-8. Kiểm tra `tripCount × volumePerTripM3` xấp xỉ `totalVolumeM3` trong sai số 0,01 m³.
-9. Không tự sửa lỗi âm thầm; trả về số dòng Excel và nguyên nhân.
+8. Nếu `tripCount × volumePerTripM3` lệch `totalVolumeM3`, hiển thị cảnh báo theo dòng nhưng dùng cột `Tổng cộng (M3)` làm giá trị chuẩn để tính X; không làm người dùng phải sửa thủ công mới chạy được.
+9. Không sửa âm thầm: cảnh báo phải ghi rõ số dòng, biển số và việc cột tổng m³ được ưu tiên.
 10. Từ chối biển số trùng trong input hoặc không có trong danh mục xe.
 11. Từ chối nếu tổng record vượt 10.000, tương đương giới hạn macro.
 
