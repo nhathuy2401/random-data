@@ -319,7 +319,7 @@ export async function loadCatalog(url = '/vehicle-catalog.xlsm') {
 }
 
 function styleCell(cell, options = {}) {
-  cell.font = { name: 'Arial', size: options.size || 10, bold: Boolean(options.bold), color: { argb: 'FF1F2937' } };
+  cell.font = { name: 'Times New Roman', size: options.size || 10, bold: Boolean(options.bold), color: { argb: 'FF1F2937' } };
   cell.alignment = { vertical: 'middle', horizontal: options.center ? 'center' : 'left', wrapText: true };
   cell.border = { top: { style: 'thin', color: { argb: 'FFD1D5DB' } }, left: { style: 'thin', color: { argb: 'FFD1D5DB' } }, bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } }, right: { style: 'thin', color: { argb: 'FFD1D5DB' } } };
 }
@@ -331,7 +331,7 @@ export async function createOutputWorkbook(input, result) {
   workbook.calcProperties.fullCalcOnLoad = true;
   const sheet = workbook.addWorksheet('Sheet1', { views: [{ state: 'frozen', ySplit: 6 }] });
   sheet.columns = [12, 14, 14, 20, 16, 14, 16, 14, 16, 16, 3, 16, 12, 12].map((width) => ({ width }));
-  sheet.mergeCells('E1:J1'); sheet.mergeCells('E2:J2'); sheet.mergeCells('E3:J3'); sheet.mergeCells('A4:J4'); sheet.mergeCells('A5:J5');
+  sheet.mergeCells('A1:D1'); sheet.mergeCells('A2:D2'); sheet.mergeCells('A3:D3'); sheet.mergeCells('E1:J1'); sheet.mergeCells('E2:J2'); sheet.mergeCells('E3:J3'); sheet.mergeCells('A4:J4'); sheet.mergeCells('A5:J5');
   sheet.getCell('A1').value = 'CÔNG TY CỔ PHẦN KHOÁNG SẢN QUẢNG TRỊ';
   sheet.getCell('E1').value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
   sheet.getCell('A2').value = 'TRẠM CÂN ĐIỆN TỬ 60 TẤN';
@@ -346,7 +346,9 @@ export async function createOutputWorkbook(input, result) {
   for (const [index, record] of result.records.entries()) {
     const rowNumber = index + 7;
     const row = sheet.getRow(rowNumber);
-    row.values = [null, index + 1, '', '', 'Cát Vĩnh Tú', record.plate, 'Cát', { formula: `H${rowNumber}+I${rowNumber}`, result: record.totalWeight }, record.carWeight, record.cargoWeight, index === 0 ? 'A.Quy' : ''];
+    // ExcelJS uses a 1-based array for row.values. The previous leading null
+    // shifted every field one column to the right (plate ended up in F).
+    row.values = [index + 1, '', '', 'Cát Vĩnh Tú', record.plate, 'Cát', { formula: `H${rowNumber}+I${rowNumber}`, result: record.totalWeight }, record.carWeight, record.cargoWeight, index === 0 ? 'A.Quy' : ''];
     row.height = 20;
     row.eachCell({ includeEmpty: true }, (cell, col) => styleCell(cell, { center: [1, 2, 3, 5, 6, 7, 8, 9, 10].includes(col) }));
     [7, 8, 9].forEach((col) => { row.getCell(col).numFmt = '#,##0'; });
@@ -364,10 +366,47 @@ export async function createOutputWorkbook(input, result) {
   [7, 8, 9].forEach((col) => { sheet.getCell(totalRow, col).numFmt = '#,##0'; });
   sheet.getCell('L6').value = 'Biển số xe'; sheet.getCell('M6').value = 'Thực tế'; sheet.getCell('N6').value = 'Số chuyến';
   input.vehicles.forEach((vehicle, index) => { const row = index + 7; sheet.getCell(`L${row}`).value = vehicle.plate; sheet.getCell(`M${row}`).value = result.records.filter((record) => record.plate === vehicle.plate).length; sheet.getCell(`N${row}`).value = vehicle.tripCount; });
-  const auditTotal = input.vehicles.length + 7; sheet.getCell(`M${auditTotal}`).value = input.totalTrips; sheet.getCell(`N${auditTotal}`).value = input.totalTrips;
-  for (let row = 6; row <= auditTotal; row += 1) for (let col = 12; col <= 14; col += 1) styleCell(sheet.getCell(row, col), { center: true });
+  const auditTotal = input.vehicles.length + 7; sheet.getCell(`L${auditTotal}`).value = 'Tổng'; sheet.getCell(`M${auditTotal}`).value = input.totalTrips; sheet.getCell(`N${auditTotal}`).value = input.totalTrips;
+  for (let row = 6; row <= auditTotal; row += 1) for (let col = 12; col <= 14; col += 1) styleCell(sheet.getCell(row, col), { center: true, bold: row === 6 || row === auditTotal });
+  for (let col = 12; col <= 14; col += 1) sheet.getCell(6, col).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDDEFEA' } };
+  for (let col = 12; col <= 14; col += 1) styleCell(sheet.getCell(auditTotal, col), { center: true, bold: true });
   sheet.getCell('L1').value = 'Metadata'; sheet.getCell('L2').value = 'Ngày'; sheet.getCell('M2').value = input.date; sheet.getCell('L3').value = 'Seed'; sheet.getCell('M3').value = result.seed; sheet.getCell('L4').value = 'Xe đầu'; sheet.getCell('M4').value = result.firstPlate; sheet.getCell('L5').value = 'Xe cuối'; sheet.getCell('M5').value = result.lastPlate;
-  sheet.pageSetup = { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  const isoDate = String(input.date).match(/^(20\d{2})-(\d{2})-(\d{2})$/);
+  const displayDate = isoDate ? `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}` : input.date;
+  sheet.getCell('A5').value = `Ngày: ${displayDate}    Tổng chuyến: ${input.totalTrips.toLocaleString('vi-VN')}    X: ${input.targetX.toLocaleString('vi-VN')} kg`;
+
+  // Format the top section as a Vietnamese administrative form.
+  const headerRows = [1, 2, 3];
+  for (const rowNumber of headerRows) {
+    const row = sheet.getRow(rowNumber);
+    row.height = rowNumber === 1 ? 22 : 19;
+    for (let col = 1; col <= 10; col += 1) {
+      const cell = sheet.getCell(rowNumber, col);
+      cell.font = { name: 'Times New Roman', size: rowNumber === 1 ? 11 : 10, bold: rowNumber <= 2, italic: rowNumber === 3, color: { argb: 'FF111827' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
+  }
+  sheet.getRow(4).height = 34;
+  sheet.getCell('A4').font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF111827' } };
+  sheet.getCell('A4').alignment = { horizontal: 'center', vertical: 'middle' };
+  sheet.getRow(5).height = 24;
+  sheet.getCell('A5').font = { name: 'Times New Roman', size: 11, italic: true, color: { argb: 'FF374151' } };
+  sheet.getCell('A5').alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let col = 1; col <= 10; col += 1) sheet.getCell(5, col).border = { bottom: { style: 'thin', color: { argb: 'FF9CA3AF' } } };
+
+  const metadata = workbook.addWorksheet('Metadata');
+  metadata.state = 'veryHidden';
+  metadata.addRows([
+    ['Ngày', input.date],
+    ['Seed', result.seed],
+    ['Xe đầu', result.firstPlate],
+    ['Xe cuối', result.lastPlate],
+  ]);
+  for (let row = 1; row <= 5; row += 1) for (let col = 12; col <= 14; col += 1) sheet.getCell(row, col).value = null;
+
+  sheet.pageSetup = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, horizontalCentered: true, margins: { left: 0.25, right: 0.25, top: 0.35, bottom: 0.35, header: 0.15, footer: 0.15 } };
+  sheet.pageSetup.printArea = `A1:N${totalRow}`;
+  sheet.headerFooter.oddFooter = 'Trang &P / &N';
   return workbook.xlsx.writeBuffer();
 }
 
