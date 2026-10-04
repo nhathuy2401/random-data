@@ -1,7 +1,8 @@
 import * as XLSX from 'xlsx';
 
 export const STEP = 10;
-export const DENSITY_KG_PER_M3 = 1280;
+export const DEFAULT_DENSITY_KG_PER_M3 = 1280;
+export const DENSITY_KG_PER_M3 = DEFAULT_DENSITY_KG_PER_M3;
 const HISTORY_KEY = 'random-data-generation-history-v1';
 
 const aliases = {
@@ -28,6 +29,11 @@ function normalizePlate(value) {
 export function roundToNearest10(value) {
   if (!Number.isFinite(value)) return NaN;
   return Math.floor((value + 5) / STEP) * STEP;
+}
+
+export function calculateTargetX(totalVolumeM3, densityKgPerM3 = DEFAULT_DENSITY_KG_PER_M3) {
+  if (!Number.isFinite(totalVolumeM3) || !Number.isFinite(densityKgPerM3) || densityKgPerM3 <= 0) return NaN;
+  return roundToNearest10(totalVolumeM3 * densityKgPerM3);
 }
 
 export function ceilTo10(value) {
@@ -137,7 +143,7 @@ export function parseInputWorkbook(arrayBuffer, fileName = '') {
   if (!vehicles.length) throw new Error('Không có dữ liệu xe hợp lệ.');
   const totalTrips = vehicles.reduce((sum, item) => sum + item.tripCount, 0);
   const totalVolumeM3 = vehicles.reduce((sum, item) => sum + item.totalVolumeM3, 0);
-  return { fileName, sheetName: selected, date: inferDate(workbook, fileName), vehicles, totalTrips, totalVolumeM3, warnings, targetX: roundToNearest10(totalVolumeM3 * DENSITY_KG_PER_M3) };
+  return { fileName, sheetName: selected, date: inferDate(workbook, fileName), vehicles, totalTrips, totalVolumeM3, warnings, densityKgPerM3: DEFAULT_DENSITY_KG_PER_M3, targetX: calculateTargetX(totalVolumeM3) };
 }
 
 function mulberry32(seed) {
@@ -166,20 +172,30 @@ function shuffle(items, random) {
   return output;
 }
 
-function buildSequence(vehicles, seed) {
+export function buildSequence(vehicles, seed) {
   const random = mulberry32(hashString(seed));
-  const remaining = new Map(vehicles.map((item) => [item.plate, item.tripCount]));
+  const maxTrips = Math.max(...vehicles.map((item) => item.tripCount));
+  const selectedRounds = new Map();
+
+  // Round 1 establishes the only shuffled vehicle order. Later rounds keep
+  // that relative order so a vehicle cannot jump from the end of one round to
+  // the beginning of the next merely because the list was shuffled again.
+  const fixedVehicleOrder = shuffle(vehicles, random);
+
+  for (const vehicle of vehicles) {
+    // Every vehicle must appear in round 1. For vehicles with fewer trips than
+    // maxTrips, only the omissions in later rounds are distributed randomly.
+    const laterRounds = Array.from({ length: Math.max(0, maxTrips - 1) }, (_, index) => index + 1);
+    const selected = shuffle(laterRounds, random).slice(0, vehicle.tripCount - 1);
+    selectedRounds.set(vehicle.plate, new Set([0, ...selected]));
+  }
+
   const output = [];
-  let round = 0;
-  while (output.length < vehicles.reduce((sum, item) => sum + item.tripCount, 0)) {
-    const order = shuffle(vehicles, () => random() + (round * 0.000001));
-    for (const vehicle of order) {
-      if ((remaining.get(vehicle.plate) || 0) > 0) {
-        output.push(vehicle.plate);
-        remaining.set(vehicle.plate, remaining.get(vehicle.plate) - 1);
-      }
+  for (let round = 0; round < maxTrips; round += 1) {
+    const activeVehicles = fixedVehicleOrder.filter((vehicle) => selectedRounds.get(vehicle.plate).has(round));
+    for (const vehicle of activeVehicles) {
+      output.push(vehicle.plate);
     }
-    round += 1;
   }
   return output;
 }
@@ -245,6 +261,9 @@ function weightedCandidate(candidates, random) {
 }
 
 export function generateRecords(input, catalog) {
+  const densityKgPerM3 = Number(input.densityKgPerM3 ?? DEFAULT_DENSITY_KG_PER_M3);
+  const targetX = calculateTargetX(input.totalVolumeM3, densityKgPerM3);
+  if (!Number.isFinite(targetX)) throw new Error('Tỉ trọng phải là số dương hợp lệ để tính X mục tiêu.');
   const catalogMap = new Map(catalog.map((item) => [normalizePlate(item.plate), item]));
   const rules = new Map();
   for (const vehicle of input.vehicles) {
@@ -277,9 +296,9 @@ export function generateRecords(input, catalog) {
 
   const minTotal = records.reduce((sum, record) => sum + record.rule.minCargo, 0);
   const maxTotal = records.reduce((sum, record) => sum + record.rule.maxCargo, 0);
-  if (input.targetX < minTotal || input.targetX > maxTotal) throw new Error(`Tổng KL hàng mục tiêu ngoài khoảng cho phép (${minTotal.toLocaleString()}–${maxTotal.toLocaleString()} kg).`);
+  if (targetX < minTotal || targetX > maxTotal) throw new Error(`Tổng KL hàng mục tiêu ngoài khoảng cho phép (${minTotal.toLocaleString()}–${maxTotal.toLocaleString()} kg).`);
   let current = records.reduce((sum, record) => sum + record.cargoWeight, 0);
-  let difference = input.targetX - current;
+  let difference = targetX - current;
   let guard = 0;
   while (difference !== 0) {
     guard += 1;
@@ -373,7 +392,9 @@ export async function createOutputWorkbook(input, result) {
   sheet.getCell('L1').value = 'Metadata'; sheet.getCell('L2').value = 'Ngày'; sheet.getCell('M2').value = input.date; sheet.getCell('L3').value = 'Seed'; sheet.getCell('M3').value = result.seed; sheet.getCell('L4').value = 'Xe đầu'; sheet.getCell('M4').value = result.firstPlate; sheet.getCell('L5').value = 'Xe cuối'; sheet.getCell('M5').value = result.lastPlate;
   const isoDate = String(input.date).match(/^(20\d{2})-(\d{2})-(\d{2})$/);
   const displayDate = isoDate ? `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}` : input.date;
-  sheet.getCell('A5').value = `Ngày: ${displayDate}    Tổng chuyến: ${input.totalTrips.toLocaleString('vi-VN')}    X: ${input.targetX.toLocaleString('vi-VN')} kg`;
+  const densityKgPerM3 = Number(input.densityKgPerM3 ?? DEFAULT_DENSITY_KG_PER_M3);
+  const targetX = calculateTargetX(input.totalVolumeM3, densityKgPerM3);
+  sheet.getCell('A5').value = `Ngày: ${displayDate}    Tổng chuyến: ${input.totalTrips.toLocaleString('vi-VN')}    Tỉ trọng: ${densityKgPerM3.toLocaleString('vi-VN')} kg/m³    X: ${targetX.toLocaleString('vi-VN')} kg`;
 
   // Format the top section as a Vietnamese administrative form.
   const headerRows = [1, 2, 3];
@@ -398,6 +419,7 @@ export async function createOutputWorkbook(input, result) {
   metadata.state = 'veryHidden';
   metadata.addRows([
     ['Ngày', input.date],
+    ['Tỉ trọng (kg/m³)', densityKgPerM3],
     ['Seed', result.seed],
     ['Xe đầu', result.firstPlate],
     ['Xe cuối', result.lastPlate],

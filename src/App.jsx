@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  DENSITY_KG_PER_M3,
+  calculateTargetX,
   createOutputWorkbook,
+  DEFAULT_DENSITY_KG_PER_M3,
   downloadBuffer,
   generateRecords,
   loadCatalog,
@@ -23,6 +24,7 @@ function App() {
   const [file, setFile] = useState(null);
   const [input, setInput] = useState(null);
   const [date, setDate] = useState('');
+  const [densityInput, setDensityInput] = useState(String(DEFAULT_DENSITY_KG_PER_M3));
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
   const [dragging, setDragging] = useState(false);
@@ -49,9 +51,14 @@ function App() {
 
   async function handleGenerate() {
     if (!input || !catalog.length) return;
+    const densityKgPerM3 = Number(densityInput);
+    const targetX = calculateTargetX(input.totalVolumeM3, densityKgPerM3);
+    if (!Number.isFinite(targetX)) {
+      setStatus('error'); setMessage('Tỉ trọng phải là số dương hợp lệ.'); return;
+    }
     setStatus('generating'); setMessage('Đang bung chuyến và sinh khối lượng…');
     try {
-      const configuredInput = { ...input, date: date || input.date };
+      const configuredInput = { ...input, date: date || input.date, densityKgPerM3, targetX };
       const result = generateRecords(configuredInput, catalog);
       setMessage('Đang tạo file Excel output…');
       const buffer = await createOutputWorkbook(configuredInput, result);
@@ -64,7 +71,9 @@ function App() {
     }
   }
 
-  const ready = Boolean(input && catalog.length && status !== 'generating');
+  const densityKgPerM3 = Number(densityInput);
+  const targetX = input ? calculateTargetX(input.totalVolumeM3, densityKgPerM3) : NaN;
+  const ready = Boolean(input && catalog.length && Number.isFinite(targetX) && status !== 'generating');
 
   return (
     <main className="app-shell">
@@ -75,7 +84,7 @@ function App() {
       </header>
 
       <section className="hero">
-        <div className="hero-copy"><p className="eyebrow">INPUT → OUTPUT</p><h2>Biến bảng chuyến xe thành dữ liệu cân hoàn chỉnh.</h2><p>Upload một file tổng hợp, hệ thống tự bung đủ lượt xe, xáo thứ tự theo ngày, sinh khối lượng chẵn chục và tải xuống Excel.</p></div>
+        <div className="hero-copy"><p className="eyebrow">INPUT → OUTPUT</p><h2>Biến bảng chuyến xe thành dữ liệu cân hoàn chỉnh.</h2><p>Upload một file tổng hợp, hệ thống tự bung đủ lượt xe, xáo thứ tự lượt đầu và giữ cố định cho các lượt sau, sinh khối lượng chẵn chục và tải xuống Excel.</p></div>
         <div className="hero-rule"><span>10 kg</span><small>đơn vị chuẩn</small></div>
       </section>
 
@@ -91,12 +100,12 @@ function App() {
 
         <div className="panel rules-panel">
           <div className="panel-heading"><div><p className="eyebrow">02 / RULES</p><h3>Thông số tự động</h3></div><span className="lock">AUTO</span></div>
-          <div className="rule-grid"><div><span>Mật độ hàng</span><strong>{formatNumber(DENSITY_KG_PER_M3)} kg/m³</strong></div><div><span>Bước khối lượng</span><strong>10 kg</strong></div><div><span>Thứ tự ngày</span><strong>Seed + lịch sử</strong></div><div><span>Giới hạn</span><strong>Catalog xe</strong></div></div>
+          <div className="rule-grid"><label className="density-field"><span>Tỉ trọng hàng</span><div className="density-control"><input type="number" min="1" step="1" value={densityInput} onChange={(event) => setDensityInput(event.target.value)} /><b>kg/m³</b></div><small>Mặc định 1.280 kg/m³</small></label><div><span>Bước khối lượng</span><strong>10 kg</strong></div><div><span>Thứ tự xe</span><strong>Khóa theo lượt 1</strong></div><div><span>Giới hạn</span><strong>Catalog xe</strong></div></div>
           <label className="date-field">Ngày dữ liệu<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         </div>
       </section>
 
-      {input && <section className="summary-grid"><Stat label="Biển số" value={formatNumber(input.vehicles.length)} detail={input.sheetName} /><Stat label="Tổng chuyến" value={formatNumber(input.totalTrips)} detail="bung đúng số lượt" /><Stat label="Tổng thể tích" value={`${formatNumber(input.totalVolumeM3, 2)} m³`} detail="từ file input" /><Stat label="X mục tiêu" value={`${formatNumber(input.targetX)} kg`} detail="đã làm tròn chẵn chục" /></section>}
+      {input && <section className="summary-grid"><Stat label="Biển số" value={formatNumber(input.vehicles.length)} detail={input.sheetName} /><Stat label="Tổng chuyến" value={formatNumber(input.totalTrips)} detail="bung đúng số lượt" /><Stat label="Tổng thể tích" value={`${formatNumber(input.totalVolumeM3, 2)} m³`} detail="từ file input" /><Stat label="X mục tiêu" value={Number.isFinite(targetX) ? `${formatNumber(targetX)} kg` : '—'} detail="theo tỉ trọng hiện tại" /></section>}
 
       {input?.warnings?.length > 0 && <section className="warning-box"><strong>Đã phát hiện {input.warnings.length} dòng lệch m³/chuyến</strong><span>{input.warnings.slice(0, 2).join(' · ')}{input.warnings.length > 2 ? ' · …' : ''}</span></section>}
 

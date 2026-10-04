@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test",
     "preview": "vite preview",
     "desktop:dev": "npm run build && electron .",
     "package:win": "npm run build && electron-builder --win portable"
@@ -18,9 +19,12 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
     "electron": "^39.0.0",
     "electron-builder": "^26.0.12",
-    "vite": "^7.1.3"
+    "vite": "^7.1.3",
+    "wait-on": "^9.1.0"
   },
   "main": "electron/main.cjs",
   "build": {

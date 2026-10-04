@@ -1,5 +1,11 @@
 # Lịch sử thay đổi
 
+## Cố định thứ tự xe theo lượt đầu
+
+- Chỉ xáo thứ tự xe một lần ở lượt đầu; các lượt sau giữ nguyên thứ tự tương đối đó.
+- Lượt đầu luôn có đủ tất cả xe. Với xe có ít chuyến hơn số lượt tối đa, các vị trí bị lược bỏ vẫn được phân bố ngẫu nhiên từ lượt 2 trở đi.
+- Bổ sung kiểm thử hồi quy cho thứ tự cố định và đúng số chuyến của từng xe.
+
 ## Bản cập nhật đóng gói desktop
 
 ### Sửa lỗi giao diện React
