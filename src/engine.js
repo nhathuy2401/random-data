@@ -24,7 +24,9 @@ function cleanText(value) {
 }
 
 function normalizePlate(value) {
-  return String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  const plate = String(value ?? '').trim().toUpperCase().replace(/\s+/g, '');
+  if (/^\d{5}$/.test(plate)) return `74H-${plate}`;
+  return plate.replace(/^(\d{2}[A-Z])(\d{5})$/, '$1-$2');
 }
 
 export function roundToNearest10(value) {
@@ -337,7 +339,7 @@ export function parseCatalogWorkbook(arrayBuffer) {
     const maxCargoCol = header.findIndex((cell) => cell.includes('cccp+8%'));
     if ([plateCol, minCarCol, maxCarCol, minCargoCol].some((col) => col < 0)) continue;
     const catalog = [];
-    const seen = new Set();
+    const catalogIndexByPlate = new Map();
     const warnings = [];
     for (let index = headerIndex + 1; index < rows.length; index += 1) {
       const row = rows[index] || [];
@@ -348,12 +350,14 @@ export function parseCatalogWorkbook(arrayBuffer) {
       if (values.some((value) => !Number.isFinite(value) || value <= 0) || values[0] > values[1] || values[2] > values[3]) {
         throw new Error(`Dòng ${index + 1} (${plate}): giới hạn khối lượng không hợp lệ.`);
       }
-      if (seen.has(plate)) {
-        warnings.push(`Dòng ${index + 1}: biển số ${plate} bị trùng; giữ giới hạn ở dòng xuất hiện trước.`);
-        continue;
+      const item = { plate, minCarRaw: values[0], maxCarRaw: values[1], minCargoRaw: values[2], maxCargoRaw: values[3] };
+      if (catalogIndexByPlate.has(plate)) {
+        warnings.push(`Dòng ${index + 1}: biển số ${plate} bị trùng; giữ giới hạn ở dòng xuất hiện sau cùng.`);
+        catalog[catalogIndexByPlate.get(plate)] = item;
+      } else {
+        catalogIndexByPlate.set(plate, catalog.length);
+        catalog.push(item);
       }
-      seen.add(plate);
-      catalog.push({ plate, minCarRaw: values[0], maxCarRaw: values[1], minCargoRaw: values[2], maxCargoRaw: values[3] });
     }
     if (catalog.length) {
       catalog.warnings = warnings;
