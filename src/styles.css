@@ -32,3 +32,9 @@ footer { display: flex; justify-content: space-between; border-top: 1px solid #d
 .density-control { display: flex; align-items: center; gap: 7px; }
 .density-control input { min-width: 0; width: 100%; border: 1px solid #d5dfd5; border-radius: 7px; padding: 7px 8px; background: #fff; color: #23473e; font: 600 13px 'Space Grotesk'; }
 .density-control b { color: #477265; font: 10px 'DM Mono'; white-space: nowrap; }
+.catalog-control { display: grid; gap: 7px; margin-top: 16px; padding: 13px; border: 1px solid #d5dfd5; border-radius: 10px; background: #f8faf5; }
+.catalog-control > span, .catalog-control small { color: #6f867c; font-size: 11px; }
+.catalog-control strong { overflow-wrap: anywhere; font: 600 12px 'Space Grotesk'; }
+.catalog-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 3px; }
+.catalog-actions button { border: 1px solid #a9bdb0; border-radius: 7px; padding: 7px 10px; background: white; color: #23473e; font-size: 11px; }
+.catalog-actions button:hover { background: #e9f0e7; }

@@ -1,6 +1,6 @@
 # Random Data Generator
 
-Web React tự động hóa quy trình tạo dữ liệu cân từ file tổng hợp chuyến xe.
+Ứng dụng React tạo dữ liệu cân từ file tổng hợp chuyến xe.
 
 ## Chạy local
 
@@ -9,15 +9,18 @@ npm install
 npm run dev
 ```
 
-Mở URL Vite hiển thị trong terminal. Người dùng chỉ cần chọn file `.xls`/`.xlsx`, kiểm tra bản xem trước và bấm **Tạo file output**.
+Chọn file tổng hợp `.xls` hoặc `.xlsx`, kiểm tra số chuyến rồi bấm **Tạo file output**. Ứng dụng dùng danh mục tải trọng xe `DANH SÁCH khoi luong XE TÚ THÁI 2026 ( Mới nhất ).xlsx` làm data source mặc định. File này được đóng gói tại `public/vehicle-catalog.xlsx`.
 
-## Build production
+Muốn dùng danh mục khác, bấm **Chọn data source khác** và chọn file `.xls`, `.xlsx` hoặc `.xlsm` có các cột **BSX MỚI**, **BÌ ĐK**, **BÌ ĐK+100**, **CCCP** và **CCCP+8%**. Với mẫu cũ, cột ngay sau **CCCP** được dùng làm giới hạn tải hàng cao nhất. Bấm **Dùng file mặc định** để khôi phục danh mục tích hợp. Nếu file có biển số trùng, ứng dụng giữ dòng xuất hiện trước và hiển thị cảnh báo.
+
+File input được xử lý trên thiết bị. Ứng dụng bung đúng số chuyến, xáo thứ tự xe ở lượt đầu, giữ thứ tự đó ở các lượt sau và tạo file Excel có khối lượng chẵn chục trong giới hạn của danh mục đã chọn.
+
+## Build
 
 ```bash
+npm run test
 npm run build
-npm run preview
+npm run package:win
 ```
 
-File `public/vehicle-catalog.xlsm` là catalog giới hạn xe được đóng gói nội bộ, nên người dùng không phải tải file generator thứ hai. Ứng dụng xử lý file input trong trình duyệt, tự bung đúng số chuyến, chỉ xáo thứ tự xe ở lượt đầu và giữ thứ tự đó cho các lượt sau. Những xe có ít chuyến hơn vẫn được lược bỏ ngẫu nhiên từ lượt 2 trở đi. Ứng dụng cũng lưu lịch sử thứ tự ngày trong `localStorage`, sinh khối lượng chẵn chục và tải `.xlsx`.
-
-Các quy tắc nghiệp vụ chi tiết nằm trong [PHAN-TICH-WEB-TAO-DU-LIEU.md](./PHAN-TICH-WEB-TAO-DU-LIEU.md).
+Quy tắc nghiệp vụ chi tiết nằm trong [PHAN-TICH-WEB-TAO-DU-LIEU.md](./PHAN-TICH-WEB-TAO-DU-LIEU.md).

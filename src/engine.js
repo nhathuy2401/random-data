@@ -16,6 +16,7 @@ function cleanText(value) {
   return String(value ?? '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
     .toLowerCase()
     .replace(/[\n\r()]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -319,22 +320,53 @@ export function generateRecords(input, catalog) {
   return { records, seed: arrangement.seed, firstPlate: records[0].plate, lastPlate: records.at(-1).plate };
 }
 
-export async function loadCatalog(url = '/vehicle-catalog.xlsm') {
+export function parseCatalogWorkbook(arrayBuffer) {
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', raw: true });
+  for (const sheetName of workbook.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: null, raw: true });
+    const headerIndex = rows.findIndex((row) => {
+      const cells = row.map(cleanText);
+      return cells.some((cell) => cell.includes('bsx moi')) && cells.some((cell) => cell.includes('bi dk')) && cells.some((cell) => cell.includes('cccp'));
+    });
+    if (headerIndex < 0) continue;
+    const header = rows[headerIndex].map(cleanText);
+    const plateCol = header.findIndex((cell) => cell.includes('bsx moi'));
+    const minCarCol = header.findIndex((cell) => cell === 'bi dk');
+    const maxCarCol = header.findIndex((cell) => cell.includes('bi dk+100'));
+    const minCargoCol = header.findIndex((cell) => cell === 'cccp');
+    const maxCargoCol = header.findIndex((cell) => cell.includes('cccp+8%'));
+    if ([plateCol, minCarCol, maxCarCol, minCargoCol].some((col) => col < 0)) continue;
+    const catalog = [];
+    const seen = new Set();
+    const warnings = [];
+    for (let index = headerIndex + 1; index < rows.length; index += 1) {
+      const row = rows[index] || [];
+      const plate = normalizePlate(row[plateCol]);
+      if (!plate) continue;
+      if (!/^\d{2}[A-Z]-\d{5}$/.test(plate)) continue;
+      const values = [row[minCarCol], row[maxCarCol], row[minCargoCol], row[maxCargoCol >= 0 ? maxCargoCol : minCargoCol + 1]].map(parseNumber);
+      if (values.some((value) => !Number.isFinite(value) || value <= 0) || values[0] > values[1] || values[2] > values[3]) {
+        throw new Error(`Dòng ${index + 1} (${plate}): giới hạn khối lượng không hợp lệ.`);
+      }
+      if (seen.has(plate)) {
+        warnings.push(`Dòng ${index + 1}: biển số ${plate} bị trùng; giữ giới hạn ở dòng xuất hiện trước.`);
+        continue;
+      }
+      seen.add(plate);
+      catalog.push({ plate, minCarRaw: values[0], maxCarRaw: values[1], minCargoRaw: values[2], maxCargoRaw: values[3] });
+    }
+    if (catalog.length) {
+      catalog.warnings = warnings;
+      return catalog;
+    }
+  }
+  throw new Error('Không tìm thấy danh mục có cột BSX MỚI, BÌ ĐK, BÌ ĐK+100 và CCCP.');
+}
+
+export async function loadCatalog(url = '/vehicle-catalog.xlsx') {
   const response = await fetch(url);
   if (!response.ok) throw new Error('Không tải được danh mục giới hạn xe tích hợp.');
-  const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array', raw: true });
-  const sheet = workbook.Sheets['File che SL'] || workbook.Sheets[workbook.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-  const catalog = [];
-  for (let index = 2; index < rows.length; index += 1) {
-    const row = rows[index] || [];
-    const plate = normalizePlate(row[3]);
-    if (!plate) continue;
-    const values = [row[5], row[7], row[8], row[9]].map(parseNumber);
-    if (values.every(Number.isFinite)) catalog.push({ plate, minCarRaw: values[0], maxCarRaw: values[1], minCargoRaw: values[2], maxCargoRaw: values[3] });
-  }
-  if (!catalog.length) throw new Error('Danh mục xe tích hợp không có dữ liệu.');
-  return catalog;
+  return parseCatalogWorkbook(await response.arrayBuffer());
 }
 
 function styleCell(cell, options = {}) {

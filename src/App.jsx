@@ -6,6 +6,7 @@ import {
   downloadBuffer,
   generateRecords,
   loadCatalog,
+  parseCatalogWorkbook,
   parseInputWorkbook,
 } from './engine.js';
 
@@ -19,8 +20,10 @@ function Stat({ label, value, detail }) {
 
 function App() {
   const inputRef = useRef(null);
+  const catalogRef = useRef(null);
   const [catalog, setCatalog] = useState([]);
   const [catalogState, setCatalogState] = useState('loading');
+  const [catalogFile, setCatalogFile] = useState(null);
   const [file, setFile] = useState(null);
   const [input, setInput] = useState(null);
   const [date, setDate] = useState('');
@@ -34,6 +37,34 @@ function App() {
       .then((items) => { setCatalog(items); setCatalogState('ready'); })
       .catch((error) => { setCatalogState('error'); setMessage(error.message); });
   }, []);
+
+  async function handleCatalogFile(nextFile) {
+    if (!nextFile) return;
+    if (!/\.(xls|xlsx|xlsm)$/i.test(nextFile.name)) {
+      setStatus('error'); setMessage('Danh mục xe phải là file .xls, .xlsx hoặc .xlsm.'); return;
+    }
+    setCatalogState('loading');
+    try {
+      const items = parseCatalogWorkbook(await nextFile.arrayBuffer());
+      setCatalog(items); setCatalogFile(nextFile); setCatalogState('ready');
+      setStatus('ready'); setMessage(`Đã nạp ${formatNumber(items.length)} xe từ ${nextFile.name}.${items.warnings?.length ? ` Có ${items.warnings.length} cảnh báo trong danh mục.` : ''}`);
+    } catch (error) {
+      setCatalogState(catalog.length ? 'ready' : 'error');
+      setStatus('error'); setMessage(error.message || 'Không đọc được danh mục xe.');
+    }
+  }
+
+  async function restoreCatalog() {
+    setCatalogState('loading');
+    try {
+      const items = await loadCatalog();
+      setCatalog(items); setCatalogFile(null); setCatalogState('ready');
+      setStatus('ready'); setMessage(`Đã khôi phục danh mục xe mặc định.${items.warnings?.length ? ` Có ${items.warnings.length} cảnh báo trong danh mục.` : ''}`);
+      if (catalogRef.current) catalogRef.current.value = '';
+    } catch (error) {
+      setCatalogState('error'); setStatus('error'); setMessage(error.message);
+    }
+  }
 
   async function handleFile(nextFile) {
     if (!nextFile) return;
@@ -80,7 +111,7 @@ function App() {
       <header className="topbar">
         <div className="brand-mark">RD</div>
         <div><p className="eyebrow">AUTOMATED WORKBOOK</p><h1>Random Data Generator</h1></div>
-        <div className="topbar-status"><i className={catalogState === 'ready' ? 'dot online' : 'dot'} />{catalogState === 'ready' ? 'Catalog sẵn sàng' : 'Đang tải catalog'}</div>
+        <div className="topbar-status"><i className={catalogState === 'ready' ? 'dot online' : 'dot'} />{catalogState === 'ready' ? `${formatNumber(catalog.length)} xe sẵn sàng` : catalogState === 'error' ? 'Lỗi danh mục xe' : 'Đang tải danh mục'}</div>
       </header>
 
       <section className="hero">
@@ -100,14 +131,17 @@ function App() {
 
         <div className="panel rules-panel">
           <div className="panel-heading"><div><p className="eyebrow">02 / RULES</p><h3>Thông số tự động</h3></div><span className="lock">AUTO</span></div>
-          <div className="rule-grid"><label className="density-field"><span>Tỉ trọng hàng</span><div className="density-control"><input type="number" min="1" step="1" value={densityInput} onChange={(event) => setDensityInput(event.target.value)} /><b>kg/m³</b></div><small>Mặc định 1.280 kg/m³</small></label><div><span>Bước khối lượng</span><strong>10 kg</strong></div><div><span>Thứ tự xe</span><strong>Khóa theo lượt 1</strong></div><div><span>Giới hạn</span><strong>Catalog xe</strong></div></div>
+          <div className="rule-grid"><label className="density-field"><span>Tỉ trọng hàng</span><div className="density-control"><input type="number" min="1" step="1" value={densityInput} onChange={(event) => setDensityInput(event.target.value)} /><b>kg/m³</b></div><small>Mặc định 1.280 kg/m³</small></label><div><span>Bước khối lượng</span><strong>10 kg</strong></div><div><span>Thứ tự xe</span><strong>Khóa theo lượt 1</strong></div><div><span>Giới hạn</span><strong>Danh mục xe</strong></div></div>
           <label className="date-field">Ngày dữ liệu<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+          <div className="catalog-control"><span>Data source xe</span><strong>{catalogFile?.name || 'DANH SÁCH khoi luong XE TÚ THÁI 2026 ( Mới nhất ).xlsx'}</strong><small>{formatNumber(catalog.length)} xe · BÌ ĐK / BÌ ĐK+100 / CCCP / CCCP+8%</small><input ref={catalogRef} type="file" accept=".xls,.xlsx,.xlsm" hidden onChange={(event) => handleCatalogFile(event.target.files?.[0])} /><div className="catalog-actions"><button type="button" onClick={() => catalogRef.current?.click()}>Chọn data source khác</button>{catalogFile && <button type="button" onClick={restoreCatalog}>Dùng file mặc định</button>}</div></div>
         </div>
       </section>
 
       {input && <section className="summary-grid"><Stat label="Biển số" value={formatNumber(input.vehicles.length)} detail={input.sheetName} /><Stat label="Tổng chuyến" value={formatNumber(input.totalTrips)} detail="bung đúng số lượt" /><Stat label="Tổng thể tích" value={`${formatNumber(input.totalVolumeM3, 2)} m³`} detail="từ file input" /><Stat label="X mục tiêu" value={Number.isFinite(targetX) ? `${formatNumber(targetX)} kg` : '—'} detail="theo tỉ trọng hiện tại" /></section>}
 
       {input?.warnings?.length > 0 && <section className="warning-box"><strong>Đã phát hiện {input.warnings.length} dòng lệch m³/chuyến</strong><span>{input.warnings.slice(0, 2).join(' · ')}{input.warnings.length > 2 ? ' · …' : ''}</span></section>}
+
+      {catalog.warnings?.length > 0 && <section className="warning-box"><strong>Danh mục xe có {catalog.warnings.length} biển số trùng</strong><span>{catalog.warnings.slice(0, 2).join(' · ')}{catalog.warnings.length > 2 ? ' · …' : ''}</span></section>}
 
       {input && <section className="panel preview-panel"><div className="panel-heading"><div><p className="eyebrow">03 / VERIFY</p><h3>Kiểm tra số lượt trước khi tạo</h3></div><span className="check-pill">✓ {formatNumber(input.totalTrips)} dòng cần sinh</span></div><div className="table-wrap"><table><thead><tr><th>Biển số</th><th>Số chuyến</th><th>Tổng m³</th><th>Trạng thái</th></tr></thead><tbody>{input.vehicles.slice(0, 8).map((vehicle) => <tr key={vehicle.plate}><td className="plate">{vehicle.plate}</td><td>{formatNumber(vehicle.tripCount)}</td><td>{formatNumber(vehicle.totalVolumeM3, 2)}</td><td><span className="valid">Sẵn sàng</span></td></tr>)}</tbody></table></div>{input.vehicles.length > 8 && <p className="table-note">Đang hiển thị 8/{formatNumber(input.vehicles.length)} xe. Tất cả xe sẽ được kiểm tra khi tạo.</p>}</section>}
 
